@@ -1,0 +1,13 @@
+# Binaries and object files
+*.o
+*.obj
+*.exe
+minic
+test_runner
+
+# Temporary editor and build files
+.vscode/
+.idea/
+*.swp
+*.tmp
+build/
