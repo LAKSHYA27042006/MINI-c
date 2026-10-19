@@ -11,3 +11,5 @@ test_runner
 *.swp
 *.tmp
 build/
+__pycache__/
+*.pyc

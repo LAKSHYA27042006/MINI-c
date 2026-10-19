@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MiniC Compiler Studio — Interactive Web Playground</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="logo-badge">MINIC</div>
+      <div class="title-group">
+        <h1>MiniC Compiler Studio</h1>
+        <p>Phase 3 Review: Interactive Pipeline & Peephole Optimizer</p>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <select id="exampleSelect" class="example-select">
+        <option value="" disabled selected>Load Sample Program...</option>
+        <option value="basic.mc">Academic Showcase (basic.mc)</option>
+        <option value="arithmetic.mc">Operator Precedence (arithmetic.mc)</option>
+        <option value="control_flow.mc">If-Else & While Loops (control_flow.mc)</option>
+        <option value="optimization.mc">6-Pass Optimization Showcase (optimization.mc)</option>
+        <option value="nested_expression.mc">Float & Nested Expressions (nested_expression.mc)</option>
+        <option value="errors.mc">Error Handling Tests (errors.mc)</option>
+      </select>
+
+      <button id="btnReset" class="btn-secondary" title="Reset to default program">↺ Reset</button>
+      <button id="btnCompile" class="btn-primary" title="Compile and optimize (Ctrl + Enter)">
+        <span>▶</span> Compile & Optimize
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="workspace-container">
+    <!-- Left: Source Code Editor -->
+    <section class="editor-panel">
+      <div class="panel-header">
+        <span>MiniC Source Code (.mc)</span>
+        <span id="compilerStatus" style="color: var(--accent-green); font-size: 11px;">● Ready</span>
+      </div>
+
+      <div class="editor-wrapper">
+        <div id="lineNumbers" class="line-numbers">1</div>
+        <textarea id="codeEditor" spellcheck="false" placeholder="// Write MiniC code here..."></textarea>
+      </div>
+
+      <div class="editor-footer">
+        <span id="editorStats">Lines: 1 | Chars: 0</span>
+        <span>Standard C11 Backend</span>
+      </div>
+    </section>
+
+    <!-- Right: Multi-Stage Compiler Inspector -->
+    <section class="inspector-panel">
+      <!-- Tab Navigation -->
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="tabPipeline">Pipeline</button>
+        <button class="tab-btn" data-tab="tabTokens">Tokens <span id="tokenBadge" class="badge-counter">0</span></button>
+        <button class="tab-btn" data-tab="tabAST">AST Tree</button>
+        <button class="tab-btn" data-tab="tabSymtab">Symbol Table <span id="symBadge" class="badge-counter">0</span></button>
+        <button class="tab-btn" data-tab="tabTAC">Three-Address Code</button>
+        <button class="tab-btn" data-tab="tabReport">Optimization Report</button>
+        <button class="tab-btn" data-tab="tabErrors">Diagnostics <span id="errBadge" class="badge-counter" style="display:none; background: var(--accent-red); color:#fff;">0</span></button>
+      </nav>
+
+      <!-- Tab 1: Pipeline Stepper -->
+      <div id="tabPipeline" class="tab-content active">
+        <div class="pipeline-stepper">
+          <div class="step-card completed" id="stepLexer">
+            <div class="step-num">1</div>
+            <div class="step-title">Lexical Scanner</div>
+          </div>
+          <div class="step-card completed" id="stepParser">
+            <div class="step-num">2</div>
+            <div class="step-title">Recursive Parser</div>
+          </div>
+          <div class="step-card completed" id="stepSemantic">
+            <div class="step-num">3</div>
+            <div class="step-title">Symbol / Semantic</div>
+          </div>
+          <div class="step-card completed" id="stepTAC">
+            <div class="step-num">4</div>
+            <div class="step-title">TAC Generator</div>
+          </div>
+          <div class="step-card completed" id="stepOpt">
+            <div class="step-num">5</div>
+            <div class="step-title">Peephole Optimizer</div>
+          </div>
+          <div class="step-card completed" id="stepReport">
+            <div class="step-num">6</div>
+            <div class="step-title">Telemetry Report</div>
+          </div>
+        </div>
+
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span class="metric-label">Execution Time</span>
+            <span id="metricTime" class="metric-value">-- ms</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Original TAC</span>
+            <span id="metricOrig" class="metric-value">--</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Optimized TAC</span>
+            <span id="metricOpt" class="metric-value">--</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Code Reduction</span>
+            <span id="metricRed" class="metric-value highlight">-- %</span>
+          </div>
+        </div>
+
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 20px;">
+          <h3 style="font-size: 15px; margin-bottom: 8px;">Compilation Summary</h3>
+          <p id="pipelineSummaryText" style="color: var(--text-muted); font-size: 13px;">
+            Click <strong>Compile & Optimize</strong> above to run your code through the 6-stage compiler pipeline.
+          </p>
+        </div>
+      </div>
+
+      <!-- Tab 2: Tokens Table -->
+      <div id="tabTokens" class="tab-content">
+        <table class="custom-table">
+          <thead>
+            <tr>
+              <th style="width: 50px;">#</th>
+              <th style="width: 90px;">Coordinates</th>
+              <th style="width: 180px;">Token Classification</th>
+              <th>Lexeme</th>
+              <th>Parsed Value</th>
+            </tr>
+          </thead>
+          <tbody id="tokensTableBody">
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No tokens generated yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab 3: AST Visualizer -->
+      <div id="tabAST" class="tab-content">
+        <div id="astTreeViewer" class="ast-container">
+          (Click Compile to construct and view the Abstract Syntax Tree)
+        </div>
+      </div>
+
+      <!-- Tab 4: Symbol Table -->
+      <div id="tabSymtab" class="tab-content">
+        <table class="custom-table">
+          <thead>
+            <tr>
+              <th>Identifier</th>
+              <th>Data Type</th>
+              <th>Scope Name</th>
+              <th>Line</th>
+              <th>Initialized</th>
+              <th>Constant Value</th>
+            </tr>
+          </thead>
+          <tbody id="symTableBody">
+            <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No symbols recorded yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tab 5: Side-by-Side TAC -->
+      <div id="tabTAC" class="tab-content">
+        <div class="diff-container">
+          <div class="diff-box">
+            <div class="diff-box-header">
+              <span>Raw Three-Address Code (Unoptimized)</span>
+              <span id="rawTacCount">0 instructions</span>
+            </div>
+            <div id="rawTacViewer" class="code-viewer">// Raw TAC will appear here</div>
+          </div>
+
+          <div class="diff-box">
+            <div class="diff-box-header">
+              <span>Optimized Three-Address Code</span>
+              <span id="optTacCount">0 instructions</span>
+            </div>
+            <div id="optTacViewer" class="code-viewer">// Optimized TAC will appear here</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 6: Optimization Report -->
+      <div id="tabReport" class="tab-content">
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span class="metric-label">Original Count</span>
+            <span id="repOrig" class="metric-value">0</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Optimized Count</span>
+            <span id="repOpt" class="metric-value">0</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Instructions Removed</span>
+            <span id="repRem" class="metric-value">0</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Reduction Percentage</span>
+            <span id="repPct" class="metric-value highlight">0.00%</span>
+          </div>
+        </div>
+
+        <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 20px;">
+          <h3 style="font-size: 14px; margin-bottom: 14px;">Peephole Optimization Pass Breakdown</h3>
+          <div class="pass-breakdown">
+            <div class="pass-row">
+              <span class="pass-name">Constant Folding</span>
+              <div class="pass-bar-wrapper"><div id="barFolding" class="pass-bar-fill" style="width: 0%;"></div></div>
+              <span id="countFolding" class="pass-count">0</span>
+            </div>
+            <div class="pass-row">
+              <span class="pass-name">Algebraic Simplification</span>
+              <div class="pass-bar-wrapper"><div id="barAlg" class="pass-bar-fill" style="width: 0%; background: var(--accent-purple);"></div></div>
+              <span id="countAlg" class="pass-count">0</span>
+            </div>
+            <div class="pass-row">
+              <span class="pass-name">Constant Propagation</span>
+              <div class="pass-bar-wrapper"><div id="barProp" class="pass-bar-fill" style="width: 0%; background: var(--accent-amber);"></div></div>
+              <span id="countProp" class="pass-count">0</span>
+            </div>
+            <div class="pass-row">
+              <span class="pass-name">Temporary Elimination</span>
+              <div class="pass-bar-wrapper"><div id="barTemp" class="pass-bar-fill" style="width: 0%; background: var(--accent-green);"></div></div>
+              <span id="countTemp" class="pass-count">0</span>
+            </div>
+            <div class="pass-row">
+              <span class="pass-name">Dead Code Elimination</span>
+              <div class="pass-bar-wrapper"><div id="barDead" class="pass-bar-fill" style="width: 0%; background: #e36209;"></div></div>
+              <span id="countDead" class="pass-count">0</span>
+            </div>
+            <div class="pass-row">
+              <span class="pass-name">Unreachable Code Removal</span>
+              <div class="pass-bar-wrapper"><div id="barUnreach" class="pass-bar-fill" style="width: 0%; background: #6e7681;"></div></div>
+              <span id="countUnreach" class="pass-count">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 7: Diagnostics & Errors -->
+      <div id="tabErrors" class="tab-content">
+        <div id="errorContainer">
+          <p style="color: var(--accent-green); font-size: 13px;">✔ No compilation errors. Zero diagnostics reported.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

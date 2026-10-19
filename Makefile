@@ -24,7 +24,7 @@ else
     RM = rm -f
 endif
 
-.PHONY: all clean run test
+.PHONY: all clean run test serve
 
 all: $(TARGET_BIN)
 
@@ -39,6 +39,9 @@ run: $(TARGET_BIN)
 
 test: $(TEST_BIN)
 	./$(TEST_BIN)
+
+serve: $(TARGET_BIN)
+	python server.py
 
 clean:
 	$(RM) $(TARGET_BIN) $(TEST_BIN) 2>nul || exit 0
