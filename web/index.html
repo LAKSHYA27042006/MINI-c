@@ -144,9 +144,20 @@
 
       <!-- Tab 3: AST Visualizer -->
       <div id="tabAST" class="tab-content">
-        <div id="astTreeViewer" class="ast-container">
-          (Click Compile to construct and view the Abstract Syntax Tree)
+        <div class="ast-header-toolbar">
+          <div class="ast-title-wrap">
+            <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Abstract Syntax Tree (AST) Hierarchy</span>
+            <span id="astNodeCount" class="pill-token pill-id" style="font-size: 11px;">0 Nodes</span>
+          </div>
+          <div class="ast-view-toggle">
+            <button id="btnAstVisual" class="btn-toggle active" title="Visual Node Tree with Connectors">🌳 Visual Tree</button>
+            <button id="btnAstText" class="btn-toggle" title="Indented Text Representation">📄 Text Tree</button>
+          </div>
         </div>
+        <div id="astVisualContainer" class="ast-visual-container">
+          <span style="color: var(--text-muted);">(Click Compile & Optimize to construct and view the Abstract Syntax Tree)</span>
+        </div>
+        <pre id="astTreeViewer" class="ast-container" style="display: none;">(Click Compile & Optimize to construct and view the Abstract Syntax Tree)</pre>
       </div>
 
       <!-- Tab 4: Symbol Table -->

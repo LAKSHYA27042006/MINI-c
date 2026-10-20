@@ -152,6 +152,9 @@ function initEditor() {
     });
   });
 
+  // AST Visual vs Text Toggle
+  initASTToggle();
+
   // Try to load examples from server
   fetch("/api/examples")
     .then((res) => res.json())
@@ -248,8 +251,8 @@ function renderCompilerResults(data) {
   // Render Tokens
   renderTokens(data.tokens || []);
 
-  // Render AST
-  document.getElementById("astTreeViewer").textContent = data.ast_text || "(No AST generated)";
+  // Render AST (both visual tree and formatted text tree)
+  renderAST(data.ast_text || "");
 
   // Render Symbols
   renderSymbols(data.symbols || []);
@@ -290,6 +293,166 @@ function renderTokens(tokens) {
     </tr>`;
   });
   tbody.innerHTML = html;
+}
+
+function initASTToggle() {
+  const btnVisual = document.getElementById("btnAstVisual");
+  const btnText = document.getElementById("btnAstText");
+  const visualContainer = document.getElementById("astVisualContainer");
+  const textContainer = document.getElementById("astTreeViewer");
+
+  if (!btnVisual || !btnText) return;
+
+  btnVisual.addEventListener("click", () => {
+    btnVisual.classList.add("active");
+    btnText.classList.remove("active");
+    visualContainer.style.display = "block";
+    textContainer.style.display = "none";
+  });
+
+  btnText.addEventListener("click", () => {
+    btnText.classList.add("active");
+    btnVisual.classList.remove("active");
+    visualContainer.style.display = "none";
+    textContainer.style.display = "block";
+  });
+}
+
+function renderAST(astText) {
+  const textViewer = document.getElementById("astTreeViewer");
+  const visualContainer = document.getElementById("astVisualContainer");
+  const nodeCountBadge = document.getElementById("astNodeCount");
+
+  textViewer.textContent = astText || "(No AST generated)";
+
+  if (!astText || !astText.trim()) {
+    visualContainer.innerHTML = `<span style="color: var(--text-muted);">(No AST generated)</span>`;
+    if (nodeCountBadge) nodeCountBadge.textContent = "0 Nodes";
+    return;
+  }
+
+  const lines = astText.split("\n").filter((l) => l.trim().length > 0);
+  if (nodeCountBadge) nodeCountBadge.textContent = `${lines.length} Nodes`;
+
+  let html = "";
+  lines.forEach((rawLine) => {
+    const indentMatch = rawLine.match(/^(\s*)/);
+    const leadingSpaces = indentMatch ? indentMatch[1].length : 0;
+    const depth = Math.floor(leadingSpaces / 2);
+    const text = rawLine.trim();
+
+    let badgeClass = "ast-badge-branch";
+    let badgeLabel = "NODE";
+    let icon = "📂";
+    let label = text;
+    let meta = "";
+
+    if (text.startsWith("Program")) {
+      badgeClass = "ast-badge-root";
+      badgeLabel = "PROGRAM";
+      icon = "📦";
+      label = "Program Root";
+      meta = text.replace("Program", "").trim();
+    } else if (text.startsWith("VarDecl:")) {
+      badgeClass = "ast-badge-stmt";
+      badgeLabel = "VAR_DECL";
+      icon = "🏷️";
+      label = text.replace("VarDecl:", "").trim();
+    } else if (text.startsWith("Assignment:")) {
+      badgeClass = "ast-badge-stmt";
+      badgeLabel = "ASSIGN";
+      icon = "✏️";
+      label = text.replace("Assignment:", "").trim();
+    } else if (text.startsWith("BinaryOp")) {
+      badgeClass = "ast-badge-op";
+      badgeLabel = "BINARY_OP";
+      icon = "⚡";
+      label = text;
+    } else if (text.startsWith("UnaryOp")) {
+      badgeClass = "ast-badge-op";
+      badgeLabel = "UNARY_OP";
+      icon = "⚡";
+      label = text;
+    } else if (text.startsWith("IntLiteral:")) {
+      badgeClass = "ast-badge-literal";
+      badgeLabel = "INT";
+      icon = "🔢";
+      label = text.replace("IntLiteral:", "").trim();
+    } else if (text.startsWith("FloatLiteral:")) {
+      badgeClass = "ast-badge-literal";
+      badgeLabel = "FLOAT";
+      icon = "🔢";
+      label = text.replace("FloatLiteral:", "").trim();
+    } else if (text.startsWith("Identifier:")) {
+      badgeClass = "ast-badge-ident";
+      badgeLabel = "IDENT";
+      icon = "🆔";
+      label = text.replace("Identifier:", "").trim();
+    } else if (text.startsWith("WhileStatement")) {
+      badgeClass = "ast-badge-ctrl";
+      badgeLabel = "WHILE";
+      icon = "🔄";
+      label = "While Loop";
+      meta = text.replace("WhileStatement", "").trim();
+    } else if (text.startsWith("IfStatement")) {
+      badgeClass = "ast-badge-ctrl";
+      badgeLabel = "IF";
+      icon = "🔀";
+      label = "If Statement";
+      meta = text.replace("IfStatement", "").trim();
+    } else if (text.startsWith("Block")) {
+      badgeClass = "ast-badge-stmt";
+      badgeLabel = "BLOCK";
+      icon = "🧱";
+      label = "Scope Block";
+      meta = text.replace("Block", "").trim();
+    } else if (text.startsWith("InitExpr:")) {
+      badgeClass = "ast-badge-branch";
+      badgeLabel = "INIT";
+      icon = "↳";
+      label = "Initialization Expression";
+    } else if (text.startsWith("Condition:")) {
+      badgeClass = "ast-badge-branch";
+      badgeLabel = "COND";
+      icon = "❓";
+      label = "Condition Expression";
+    } else if (text.startsWith("Body:")) {
+      badgeClass = "ast-badge-branch";
+      badgeLabel = "BODY";
+      icon = "▶";
+      label = "Loop Body";
+    } else if (text.startsWith("ThenBranch:")) {
+      badgeClass = "ast-badge-branch";
+      badgeLabel = "THEN";
+      icon = "✔";
+      label = "Then Branch";
+    } else if (text.startsWith("ElseBranch:")) {
+      badgeClass = "ast-badge-branch";
+      badgeLabel = "ELSE";
+      icon = "✖";
+      label = "Else Branch";
+    }
+
+    let guideStr = "";
+    for (let d = 0; d < depth; d++) {
+      guideStr += "│   ";
+    }
+    const connector = depth > 0 ? "├── " : "";
+
+    html += `
+      <div class="ast-row">
+        <span class="ast-indent-guide">${guideStr}</span>
+        ${connector ? `<span class="ast-connector">${connector}</span>` : ""}
+        <div class="ast-node-card">
+          <span class="ast-badge ${badgeClass}">${icon} ${badgeLabel}</span>
+          <span class="ast-node-label">${escapeHtml(label)}</span>
+          ${meta ? `<span class="ast-node-meta">${escapeHtml(meta)}</span>` : ""}
+        </div>
+      </div>
+    `;
+  });
+
+  visualContainer.innerHTML = html;
 }
 
 function renderSymbols(symbols) {
