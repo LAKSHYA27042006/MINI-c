@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MiniC Compiler Studio — Interactive Web Playground</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
   <!-- Header Bar -->
@@ -146,18 +146,39 @@
       <div id="tabAST" class="tab-content">
         <div class="ast-header-toolbar">
           <div class="ast-title-wrap">
-            <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Abstract Syntax Tree (AST) Hierarchy</span>
+            <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">Abstract Syntax Tree (AST) Visualizer</span>
             <span id="astNodeCount" class="pill-token pill-id" style="font-size: 11px;">0 Nodes</span>
           </div>
           <div class="ast-view-toggle">
-            <button id="btnAstVisual" class="btn-toggle active" title="Visual Node Tree with Connectors">🌳 Visual Tree</button>
-            <button id="btnAstText" class="btn-toggle" title="Indented Text Representation">📄 Text Tree</button>
+            <button id="btnAstBinary" class="btn-toggle active" title="Graphical Binary Syntax Tree Diagram">🌳 Binary Tree</button>
+            <button id="btnAstVisual" class="btn-toggle" title="Hierarchical Outline Hierarchy">🌲 Outline</button>
+            <button id="btnAstText" class="btn-toggle" title="Indented Monospace Text Representation">📄 Text</button>
           </div>
         </div>
-        <div id="astVisualContainer" class="ast-visual-container">
-          <span style="color: var(--text-muted);">(Click Compile & Optimize to construct and view the Abstract Syntax Tree)</span>
+
+        <!-- 1. Binary Tree Diagram View -->
+        <div id="astBinaryContainer" class="binary-tree-wrapper">
+          <div class="binary-tree-toolbar">
+            <div class="stmt-select-wrap">
+              <span>Inspect Expression Subtree:</span>
+              <select id="astSubtreeSelect" class="stmt-select">
+                <option value="all">Full Program Tree</option>
+              </select>
+            </div>
+            <span style="font-size: 11px; color: var(--text-muted);">Graphical Binary Syntax Representation (Left &amp; Right Branches)</span>
+          </div>
+          <div id="binaryTreeRoot" class="binary-tree">
+            <span style="color: var(--text-muted);">(Click Compile &amp; Optimize to generate the Binary Syntax Tree)</span>
+          </div>
         </div>
-        <pre id="astTreeViewer" class="ast-container" style="display: none;">(Click Compile & Optimize to construct and view the Abstract Syntax Tree)</pre>
+
+        <!-- 2. Outline Hierarchy View -->
+        <div id="astVisualContainer" class="ast-visual-container" style="display: none;">
+          <span style="color: var(--text-muted);">(Click Compile &amp; Optimize to construct and view the Abstract Syntax Tree)</span>
+        </div>
+
+        <!-- 3. Indented Raw Text View -->
+        <pre id="astTreeViewer" class="ast-container" style="display: none;">(Click Compile &amp; Optimize to construct and view the Abstract Syntax Tree)</pre>
       </div>
 
       <!-- Tab 4: Symbol Table -->
@@ -267,6 +288,6 @@
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

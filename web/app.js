@@ -296,37 +296,277 @@ function renderTokens(tokens) {
 }
 
 function initASTToggle() {
+  const btnBinary = document.getElementById("btnAstBinary");
   const btnVisual = document.getElementById("btnAstVisual");
   const btnText = document.getElementById("btnAstText");
+
+  const binaryContainer = document.getElementById("astBinaryContainer");
   const visualContainer = document.getElementById("astVisualContainer");
   const textContainer = document.getElementById("astTreeViewer");
 
-  if (!btnVisual || !btnText) return;
+  if (!btnBinary || !btnVisual || !btnText) return;
+
+  btnBinary.addEventListener("click", () => {
+    btnBinary.classList.add("active");
+    btnVisual.classList.remove("active");
+    btnText.classList.remove("active");
+
+    binaryContainer.style.display = "block";
+    visualContainer.style.display = "none";
+    textContainer.style.display = "none";
+  });
 
   btnVisual.addEventListener("click", () => {
     btnVisual.classList.add("active");
+    btnBinary.classList.remove("active");
     btnText.classList.remove("active");
+
+    binaryContainer.style.display = "none";
     visualContainer.style.display = "block";
     textContainer.style.display = "none";
   });
 
   btnText.addEventListener("click", () => {
     btnText.classList.add("active");
+    btnBinary.classList.remove("active");
     btnVisual.classList.remove("active");
+
+    binaryContainer.style.display = "none";
     visualContainer.style.display = "none";
     textContainer.style.display = "block";
   });
 }
 
+// Convert indented text into tree structure
+function parseIndentedAST(text) {
+  if (!text) return null;
+  const lines = text.split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return null;
+
+  const root = { label: "Program Root", depth: -1, children: [] };
+  const stack = [root];
+
+  lines.forEach((rawLine) => {
+    const indentMatch = rawLine.match(/^(\s*)/);
+    const leadingSpaces = indentMatch ? indentMatch[1].length : 0;
+    const depth = Math.floor(leadingSpaces / 2);
+    const cleanText = rawLine.trim();
+
+    const node = { label: cleanText, depth: depth, children: [] };
+    while (stack.length > 1 && stack[stack.length - 1].depth >= depth) {
+      stack.pop();
+    }
+    stack[stack.length - 1].children.push(node);
+    stack.push(node);
+  });
+
+  return root;
+}
+
+// Transform AST node into clean binary expression node
+function cleanBinaryTreeNode(node) {
+  if (!node) return null;
+  const t = node.label;
+
+  // BinaryOp ('+')
+  if (t.startsWith("BinaryOp")) {
+    const match = t.match(/BinaryOp \('([^']+)'\)/);
+    const op = match ? match[1] : "+";
+    return {
+      label: op,
+      type: "operator",
+      tag: "OP",
+      children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  }
+
+  // UnaryOp ('-')
+  if (t.startsWith("UnaryOp")) {
+    const match = t.match(/UnaryOp \('([^']+)'\)/);
+    const op = match ? match[1] : "-";
+    return {
+      label: op,
+      type: "operator",
+      tag: "UNARY",
+      children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  }
+
+  // Identifier: 'a'
+  if (t.startsWith("Identifier:")) {
+    const match = t.match(/Identifier: '([^']+)'/);
+    const id = match ? match[1] : "id";
+    return {
+      label: id,
+      type: "identifier",
+      tag: "ID",
+      children: []
+    };
+  }
+
+  // IntLiteral: 10
+  if (t.startsWith("IntLiteral:")) {
+    const val = t.replace("IntLiteral:", "").trim();
+    return {
+      label: val,
+      type: "literal",
+      tag: "INT",
+      children: []
+    };
+  }
+
+  // FloatLiteral: 3.14
+  if (t.startsWith("FloatLiteral:")) {
+    const val = t.replace("FloatLiteral:", "").trim();
+    return {
+      label: val,
+      type: "literal",
+      tag: "FLOAT",
+      children: []
+    };
+  }
+
+  // InitExpr: pass-through to expression child
+  if (t.startsWith("InitExpr:")) {
+    if (node.children.length === 1) {
+      return cleanBinaryTreeNode(node.children[0]);
+    }
+    return {
+      label: "init",
+      type: "branch",
+      tag: "INIT",
+      children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  }
+
+  // Condition: pass-through to expression child
+  if (t.startsWith("Condition:")) {
+    if (node.children.length === 1) {
+      return cleanBinaryTreeNode(node.children[0]);
+    }
+    return {
+      label: "cond",
+      type: "branch",
+      tag: "COND",
+      children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  }
+
+  // VarDecl: int a [Line 10]
+  if (t.startsWith("VarDecl:")) {
+    const namePart = t.replace("VarDecl:", "").split("[")[0].trim();
+    return {
+      label: namePart,
+      type: "vardecl",
+      tag: "DECL",
+      children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  }
+
+  // Assignment: y = [Line 14]
+  if (t.startsWith("Assignment:")) {
+    const namePart = t.replace("Assignment:", "").split("[")[0].trim();
+    return {
+      label: namePart,
+      type: "assign",
+      tag: "ASSIGN",
+      children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  }
+
+  // WhileStatement
+  if (t.startsWith("WhileStatement")) {
+    return {
+      label: "while ( )",
+      type: "control",
+      tag: "WHILE",
+      children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  }
+
+  // IfStatement
+  if (t.startsWith("IfStatement")) {
+    return {
+      label: "if ( )",
+      type: "control",
+      tag: "IF",
+      children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  }
+
+  // Block
+  if (t.startsWith("Block")) {
+    return {
+      label: "{ body }",
+      type: "control",
+      tag: "BLOCK",
+      children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  }
+
+  // Body / ThenBranch / ElseBranch
+  if (t.startsWith("Body:") || t.startsWith("ThenBranch:") || t.startsWith("ElseBranch:")) {
+    if (node.children.length === 1) {
+      return cleanBinaryTreeNode(node.children[0]);
+    }
+    return {
+      label: t.replace(":", ""),
+      type: "branch",
+      tag: "BRANCH",
+      children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  }
+
+  return {
+    label: t,
+    type: "generic",
+    tag: "NODE",
+    children: node.children.map(cleanBinaryTreeNode).filter(Boolean)
+  };
+}
+
+// Generate HTML <ul> <li> tree structure
+function generateBinaryTreeHTML(node) {
+  if (!node) return "";
+  let badgeClass = "node-id";
+
+  if (node.type === "operator") badgeClass = "node-op";
+  else if (node.type === "identifier") badgeClass = "node-id";
+  else if (node.type === "literal") badgeClass = "node-num";
+  else if (node.type === "vardecl" || node.type === "assign") badgeClass = "node-stmt";
+  else if (node.type === "control") badgeClass = "node-ctrl";
+
+  let childrenHTML = "";
+  if (node.children && node.children.length > 0) {
+    childrenHTML = "<ul>" + node.children.map(generateBinaryTreeHTML).join("") + "</ul>";
+  }
+
+  return `
+    <li>
+      <div class="tree-node ${badgeClass}">
+        <span class="node-tag">${escapeHtml(node.tag || '')}</span>
+        <span>${escapeHtml(node.label)}</span>
+      </div>
+      ${childrenHTML}
+    </li>
+  `;
+}
+
+// Store current parsed tree for subtree selector
+let currentParsedAST = null;
+
 function renderAST(astText) {
   const textViewer = document.getElementById("astTreeViewer");
   const visualContainer = document.getElementById("astVisualContainer");
+  const binaryRoot = document.getElementById("binaryTreeRoot");
   const nodeCountBadge = document.getElementById("astNodeCount");
+  const subtreeSelect = document.getElementById("astSubtreeSelect");
 
   textViewer.textContent = astText || "(No AST generated)";
 
   if (!astText || !astText.trim()) {
     visualContainer.innerHTML = `<span style="color: var(--text-muted);">(No AST generated)</span>`;
+    binaryRoot.innerHTML = `<span style="color: var(--text-muted);">(No AST generated)</span>`;
     if (nodeCountBadge) nodeCountBadge.textContent = "0 Nodes";
     return;
   }
@@ -334,7 +574,8 @@ function renderAST(astText) {
   const lines = astText.split("\n").filter((l) => l.trim().length > 0);
   if (nodeCountBadge) nodeCountBadge.textContent = `${lines.length} Nodes`;
 
-  let html = "";
+  // 1. Build and Render Outline Hierarchy View
+  let outlineHtml = "";
   lines.forEach((rawLine) => {
     const indentMatch = rawLine.match(/^(\s*)/);
     const leadingSpaces = indentMatch ? indentMatch[1].length : 0;
@@ -421,16 +662,6 @@ function renderAST(astText) {
       badgeLabel = "BODY";
       icon = "▶";
       label = "Loop Body";
-    } else if (text.startsWith("ThenBranch:")) {
-      badgeClass = "ast-badge-branch";
-      badgeLabel = "THEN";
-      icon = "✔";
-      label = "Then Branch";
-    } else if (text.startsWith("ElseBranch:")) {
-      badgeClass = "ast-badge-branch";
-      badgeLabel = "ELSE";
-      icon = "✖";
-      label = "Else Branch";
     }
 
     let guideStr = "";
@@ -439,7 +670,7 @@ function renderAST(astText) {
     }
     const connector = depth > 0 ? "├── " : "";
 
-    html += `
+    outlineHtml += `
       <div class="ast-row">
         <span class="ast-indent-guide">${guideStr}</span>
         ${connector ? `<span class="ast-connector">${connector}</span>` : ""}
@@ -451,8 +682,59 @@ function renderAST(astText) {
       </div>
     `;
   });
+  visualContainer.innerHTML = outlineHtml;
 
-  visualContainer.innerHTML = html;
+  // 2. Parse Hierarchical Tree Object for Graphical Binary Tree View
+  const parsedRoot = parseIndentedAST(astText);
+  currentParsedAST = parsedRoot;
+
+  // Populate subtree selector
+  if (subtreeSelect && parsedRoot && parsedRoot.children.length > 0) {
+    const progNode = parsedRoot.children[0];
+    const stmts = progNode.children || [];
+
+    let selectHtml = `<option value="all">Full Program Tree (${stmts.length} statements)</option>`;
+    stmts.forEach((stmt, idx) => {
+      const summary = stmt.label.split("[")[0].trim();
+      selectHtml += `<option value="${idx}">Stmt ${idx + 1}: ${escapeHtml(summary)}</option>`;
+    });
+    subtreeSelect.innerHTML = selectHtml;
+
+    subtreeSelect.onchange = (e) => {
+      renderSelectedSubtree(e.target.value);
+    };
+  }
+
+  // Render initial binary tree view (Full Program or first expression)
+  renderSelectedSubtree("all");
+}
+
+function renderSelectedSubtree(val) {
+  const binaryRoot = document.getElementById("binaryTreeRoot");
+  if (!binaryRoot || !currentParsedAST || !currentParsedAST.children.length) return;
+
+  const progNode = currentParsedAST.children[0];
+  const stmts = progNode.children || [];
+
+  let targetNode = null;
+  if (val === "all") {
+    // Show Program Root with each statement as child
+    targetNode = {
+      label: "Program",
+      type: "control",
+      tag: "ROOT",
+      children: stmts.map(cleanBinaryTreeNode).filter(Boolean)
+    };
+  } else {
+    const idx = parseInt(val, 10);
+    if (!isNaN(idx) && stmts[idx]) {
+      targetNode = cleanBinaryTreeNode(stmts[idx]);
+    }
+  }
+
+  if (targetNode) {
+    binaryRoot.innerHTML = `<ul>${generateBinaryTreeHTML(targetNode)}</ul>`;
+  }
 }
 
 function renderSymbols(symbols) {
@@ -574,6 +856,115 @@ function renderOfflineSimulation(source) {
       opt_tac: ["    valid  = 10"],
       report: { original_count: 1, optimized_count: 1, instructions_removed: 0, reduction_percentage: 0 },
       errors: [{ type: "Semantic Error", line: 3, column: 1, message: "Assignment to undeclared variable 'undeclared_target'." }]
+    });
+    return;
+  }
+
+  // Check if arithmetic.mc sample
+  if (source.includes("res1 = a + b * c")) {
+    renderCompilerResults({
+      success: true,
+      elapsed_ms: 2.1,
+      tokens: [
+        { line: 10, column: 1, type: "KEYWORD_INT", lexeme: "int", value: "" },
+        { line: 10, column: 5, type: "IDENTIFIER", lexeme: "a", value: "" },
+        { line: 10, column: 9, type: "INTEGER_LITERAL", lexeme: "10", value: "10" },
+        { line: 11, column: 1, type: "KEYWORD_INT", lexeme: "int", value: "" },
+        { line: 11, column: 5, type: "IDENTIFIER", lexeme: "b", value: "" },
+        { line: 11, column: 9, type: "INTEGER_LITERAL", lexeme: "20", value: "20" },
+        { line: 12, column: 1, type: "KEYWORD_INT", lexeme: "int", value: "" },
+        { line: 12, column: 5, type: "IDENTIFIER", lexeme: "c", value: "" },
+        { line: 12, column: 9, type: "INTEGER_LITERAL", lexeme: "5", value: "5" },
+        { line: 15, column: 1, type: "KEYWORD_INT", lexeme: "int", value: "" },
+        { line: 15, column: 5, type: "IDENTIFIER", lexeme: "res1", value: "" },
+        { line: 15, column: 14, type: "PLUS", lexeme: "+", value: "" },
+        { line: 15, column: 18, type: "MULTIPLY", lexeme: "*", value: "" }
+      ],
+      ast_text: `Program (statements: 6)
+  VarDecl: int a [Line 10]
+    InitExpr:
+      IntLiteral: 10
+  VarDecl: int b [Line 11]
+    InitExpr:
+      IntLiteral: 20
+  VarDecl: int c [Line 12]
+    InitExpr:
+      IntLiteral: 5
+  VarDecl: int res1 [Line 15]
+    InitExpr:
+      BinaryOp ('+') [Type: int]
+        Identifier: 'a' [Type: int]
+        BinaryOp ('*') [Type: int]
+          Identifier: 'b' [Type: int]
+          Identifier: 'c' [Type: int]
+  VarDecl: int res2 [Line 18]
+    InitExpr:
+      BinaryOp ('*') [Type: int]
+        BinaryOp ('+') [Type: int]
+          Identifier: 'a' [Type: int]
+          Identifier: 'b' [Type: int]
+        Identifier: 'c' [Type: int]
+  VarDecl: int res3 [Line 21]
+    InitExpr:
+      BinaryOp ('%') [Type: int]
+        BinaryOp ('/') [Type: int]
+          BinaryOp ('+') [Type: int]
+            Identifier: 'a' [Type: int]
+            Identifier: 'b' [Type: int]
+          BinaryOp ('-') [Type: int]
+            Identifier: 'c' [Type: int]
+            IntLiteral: 2
+        IntLiteral: 4`,
+      symbols: [
+        { name: "a", type: "int", scope: "global", line: "10", initialized: "Yes", const_val: "-" },
+        { name: "b", type: "int", scope: "global", line: "11", initialized: "Yes", const_val: "-" },
+        { name: "c", type: "int", scope: "global", line: "12", initialized: "Yes", const_val: "-" },
+        { name: "res1", type: "int", scope: "global", line: "15", initialized: "Yes", const_val: "-" },
+        { name: "res2", type: "int", scope: "global", line: "18", initialized: "Yes", const_val: "-" },
+        { name: "res3", type: "int", scope: "global", line: "21", initialized: "Yes", const_val: "-" }
+      ],
+      raw_tac: [
+        "    a      = 10",
+        "    b      = 20",
+        "    c      = 5",
+        "    t1     = b * c",
+        "    t2     = a + t1",
+        "    res1   = t2",
+        "    t3     = a + b",
+        "    t4     = t3 * c",
+        "    res2   = t4",
+        "    t5     = a + b",
+        "    t6     = c - 2",
+        "    t7     = t5 / t6",
+        "    t8     = t7 % 4",
+        "    res3   = t8"
+      ],
+      opt_tac: [
+        "    a      = 10",
+        "    b      = 20",
+        "    c      = 5",
+        "    t1     = 100",
+        "    res1   = 10 + t1",
+        "    t3     = 30",
+        "    res2   = t3 * 5",
+        "    t5     = 30",
+        "    t6     = 3",
+        "    t7     = t5 / t6",
+        "    res3   = t7 % 4"
+      ],
+      report: {
+        original_count: 14,
+        optimized_count: 11,
+        instructions_removed: 3,
+        constant_folding: 4,
+        algebraic_simplification: 0,
+        constant_propagation: 9,
+        temp_elimination: 3,
+        dead_code: 0,
+        unreachable_code: 0,
+        reduction_percentage: 21.43
+      },
+      errors: []
     });
     return;
   }

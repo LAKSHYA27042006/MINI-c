@@ -110,119 +110,119 @@ def parse_compiler_output(stdout_text, stderr_text, return_code):
                 "raw": line_clean
             })
 
-    # Section parsing based on delimiters
-    sections = stdout_text.split("========================================")
-    for i, sec in enumerate(sections):
-        sec_text = sec.strip()
-        if not sec_text:
-            continue
+    # Section parsing
+    # 1. Tokens Section
+    if "TOKEN STREAM" in stdout_text:
+        token_part = stdout_text.split("TOKEN STREAM", 1)[1]
+        for tline in token_part.splitlines():
+            tline = tline.strip()
+            if tline.startswith("[Line"):
+                try:
+                    meta, rest = tline.split("]", 1)
+                    meta_parts = meta.replace("[", "").split(",")
+                    line_n = int(meta_parts[0].replace("Line", "").strip())
+                    col_n = int(meta_parts[1].replace("Col", "").strip())
 
-        # 1. Tokens Section
-        if "TOKEN STREAM" in sec_text:
-            # The next section contains the tokens
-            if i + 1 < len(sections):
-                token_lines = sections[i + 1].strip().splitlines()
-                for tline in token_lines:
-                    tline = tline.strip()
-                    if tline.startswith("[Line"):
-                        # Format: [Line  10, Col   1] KEYWORD_INT      : 'int' (value: ...)
-                        try:
-                            meta, rest = tline.split("]", 1)
-                            meta_parts = meta.replace("[", "").split(",")
-                            line_n = int(meta_parts[0].replace("Line", "").strip())
-                            col_n = int(meta_parts[1].replace("Col", "").strip())
+                    type_part, lex_part = rest.split(":", 1)
+                    token_type = type_part.strip()
 
-                            type_part, lex_part = rest.split(":", 1)
-                            token_type = type_part.strip()
+                    val_str = ""
+                    lexeme = lex_part.strip()
+                    if "(value:" in lexeme:
+                        lexeme, val_part = lexeme.split("(value:", 1)
+                        val_str = val_part.replace(")", "").strip()
+                    lexeme = lexeme.strip().strip("'")
 
-                            val_str = ""
-                            lexeme = lex_part.strip()
-                            if "(value:" in lexeme:
-                                lexeme, val_part = lexeme.split("(value:", 1)
-                                val_str = val_part.replace(")", "").strip()
-                            lexeme = lexeme.strip().strip("'")
+                    result["tokens"].append({
+                        "line": line_n,
+                        "column": col_n,
+                        "type": token_type,
+                        "lexeme": lexeme,
+                        "value": val_str
+                    })
+                except Exception:
+                    pass
+            elif tline.startswith("========================================") and len(result["tokens"]) > 0:
+                break
 
-                            result["tokens"].append({
-                                "line": line_n,
-                                "column": col_n,
-                                "type": token_type,
-                                "lexeme": lexeme,
-                                "value": val_str
-                            })
-                        except Exception:
-                            pass
+    # 2. AST Section
+    if "ABSTRACT SYNTAX TREE (AST)" in stdout_text:
+        ast_part = stdout_text.split("ABSTRACT SYNTAX TREE (AST)", 1)[1]
+        ast_blocks = [p.strip() for p in ast_part.split("========================================") if p.strip()]
+        if ast_blocks:
+            result["ast_text"] = ast_blocks[0]
 
-        # 2. AST Section
-        elif "ABSTRACT SYNTAX TREE (AST)" in sec_text:
-            if i + 1 < len(sections):
-                result["ast_text"] = sections[i + 1].strip()
+    # 3. Symbol Table Directory
+    if "SYMBOL TABLE DIRECTORY" in stdout_text:
+        sym_part = stdout_text.split("SYMBOL TABLE DIRECTORY", 1)[1]
+        start_table = False
+        for s_line in sym_part.splitlines():
+            s_line = s_line.strip()
+            if "----------------------------------" in s_line:
+                start_table = True
+                continue
+            if start_table and s_line.startswith("==="):
+                break
+            if start_table and s_line:
+                cols = s_line.split()
+                if len(cols) >= 5:
+                    result["symbols"].append({
+                        "name": cols[0],
+                        "type": cols[1],
+                        "scope": cols[2],
+                        "line": cols[3],
+                        "initialized": cols[4],
+                        "const_val": cols[5] if len(cols) > 5 else "-"
+                    })
 
-        # 3. Symbol Table Directory
-        elif "SYMBOL TABLE DIRECTORY" in sec_text:
-            lines = sec_text.splitlines()
-            start_table = False
-            for s_line in lines:
-                s_line = s_line.strip()
-                if "----------------------------------" in s_line:
-                    start_table = True
-                    continue
-                if start_table and s_line and not s_line.startswith("==="):
-                    cols = s_line.split()
-                    if len(cols) >= 5:
-                        result["symbols"].append({
-                            "name": cols[0],
-                            "type": cols[1],
-                            "scope": cols[2],
-                            "line": cols[3],
-                            "initialized": cols[4],
-                            "const_val": cols[5] if len(cols) > 5 else "-"
-                        })
+    # 4. Raw TAC Section
+    if "RAW THREE-ADDRESS CODE" in stdout_text:
+        tac_part = stdout_text.split("RAW THREE-ADDRESS CODE", 1)[1]
+        tac_blocks = [p.strip() for p in tac_part.split("========================================") if p.strip()]
+        if tac_blocks:
+            result["raw_tac"] = [ln.rstrip() for ln in tac_blocks[0].splitlines() if ln.strip()]
 
-        # 4. Raw TAC Section
-        elif "RAW THREE-ADDRESS CODE" in sec_text:
-            if i + 1 < len(sections):
-                tac_lines = sections[i + 1].strip().splitlines()
-                result["raw_tac"] = [ln.rstrip() for ln in tac_lines if ln.strip()]
+    # 5. Optimized TAC Section
+    if "OPTIMIZED THREE-ADDRESS CODE" in stdout_text:
+        opt_part = stdout_text.split("OPTIMIZED THREE-ADDRESS CODE", 1)[1]
+        opt_blocks = [p.strip() for p in opt_part.split("========================================") if p.strip()]
+        if opt_blocks:
+            result["opt_tac"] = [ln.rstrip() for ln in opt_blocks[0].splitlines() if ln.strip()]
 
-        # 5. Optimized TAC Section
-        elif "OPTIMIZED THREE-ADDRESS CODE" in sec_text:
-            if i + 1 < len(sections):
-                opt_lines = sections[i + 1].strip().splitlines()
-                result["opt_tac"] = [ln.rstrip() for ln in opt_lines if ln.strip()]
-
-        # 6. Optimization Report
-        elif "OPTIMIZATION REPORT" in sec_text:
-            if i + 1 < len(sections):
-                rep_lines = sections[i + 1].strip().splitlines()
-                for r_line in rep_lines:
-                    r_line = r_line.strip()
-                    if ":" in r_line:
-                        key, val = r_line.split(":", 1)
-                        key = key.strip()
-                        val = val.strip()
-                        try:
-                            if "Original TAC instructions" in key:
-                                result["report"]["original_count"] = int(val)
-                            elif "Optimized TAC instructions" in key:
-                                result["report"]["optimized_count"] = int(val)
-                            elif "Instructions removed" in key:
-                                result["report"]["instructions_removed"] = int(val)
-                            elif "Constant folding" in key:
-                                result["report"]["constant_folding"] = int(val)
-                            elif "Algebraic simplification" in key:
-                                result["report"]["algebraic_simplification"] = int(val)
-                            elif "Constant propagation" in key:
-                                result["report"]["constant_propagation"] = int(val)
-                            elif "Temporary elimination" in key:
-                                result["report"]["temp_elimination"] = int(val)
-                            elif "Dead code elimination" in key:
-                                result["report"]["dead_code"] = int(val)
-                            elif "Unreachable code removal" in key:
-                                result["report"]["unreachable_code"] = int(val)
-                            elif "Reduction" in key:
-                                result["report"]["reduction_percentage"] = float(val.replace("%", "").strip())
-                        except ValueError:
-                            pass
+    # 6. Optimization Report
+    if "OPTIMIZATION REPORT" in stdout_text:
+        rep_part = stdout_text.split("OPTIMIZATION REPORT", 1)[1]
+        rep_blocks = [p.strip() for p in rep_part.split("========================================") if p.strip()]
+        if rep_blocks:
+            for r_line in rep_blocks[0].splitlines():
+                r_line = r_line.strip()
+                if ":" in r_line:
+                    key, val = r_line.split(":", 1)
+                    key = key.strip()
+                    val = val.strip()
+                    try:
+                        if "Original TAC instructions" in key:
+                            result["report"]["original_count"] = int(val)
+                        elif "Optimized TAC instructions" in key:
+                            result["report"]["optimized_count"] = int(val)
+                        elif "Instructions removed" in key:
+                            result["report"]["instructions_removed"] = int(val)
+                        elif "Constant folding" in key:
+                            result["report"]["constant_folding"] = int(val)
+                        elif "Algebraic simplification" in key:
+                            result["report"]["algebraic_simplification"] = int(val)
+                        elif "Constant propagation" in key:
+                            result["report"]["constant_propagation"] = int(val)
+                        elif "Temporary elimination" in key:
+                            result["report"]["temp_elimination"] = int(val)
+                        elif "Dead code elimination" in key:
+                            result["report"]["dead_code"] = int(val)
+                        elif "Unreachable code removal" in key:
+                            result["report"]["unreachable_code"] = int(val)
+                        elif "Reduction" in key:
+                            result["report"]["reduction_percentage"] = float(val.replace("%", "").strip())
+                    except ValueError:
+                        pass
 
     return result
 
